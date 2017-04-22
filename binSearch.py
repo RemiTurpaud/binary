@@ -98,6 +98,9 @@ y=Y[0:tCutOff]
 xt=X[tCutOff:]
 yt=Y[tCutOff:]
 
+del X,Y,i
+
+print('Data Loaded - Start training')
 
 #Test
 from keras.models import Sequential
