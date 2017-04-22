@@ -124,7 +124,7 @@ def buildModel(convol,cdropout,hidden,hdropout):
     # create and fit the LSTM network
     #Deep with covolution
     model = Sequential()
-    model.add(Reshape(X.shape[1:],input_shape=x.shape[1:]))
+    model.add(Reshape(x.shape[1:],input_shape=x.shape[1:]))
     for c, d in zip(convol,cdropout):
         model.add(Convolution1D(filters=int(c), kernel_size=5, padding='same', activation='relu'))  #--Raised to 5 makes difference
         if d>0:
