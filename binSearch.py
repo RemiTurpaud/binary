@@ -175,5 +175,11 @@ def evalModels(params):
 #Evaluate models
 params=[]
 params.append([[16,16],[.1,.1],[4],[.1]])
+params.append([[16,16],[.2,.2],[4],[.1]])
+params.append([[32,16],[.1,.1],[4],[.1]])
+params.append([[16,8],[.1,.1],[4],[.1]])
+params.append([[16,8],[.1,.1],[8,4],[.1,.1]])
+params.append([[16,8],[.01,.01],[8,4],[.01,.01]])
+params.append([[16,8],[.1,.1],[8,8,4],[.1,.1,.1]])
 
 evalModels(params)
