@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd 
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os
 import numpy_groupies as npg
 
+HistDepth=60
 #Load data
 df=pd.read_csv("~/ML/FX/data/EUR_USD.csv",usecols=['RateDateTime','RateBid','RateAsk'],dtype={'RateBid': np.float32,'RateAsk': np.float32},index_col=0,parse_dates=True)
 df['c']=(df.RateBid+df.RateAsk)/2
@@ -26,7 +26,7 @@ df=df.c.resample('1s').ohlc().close
 
 #Build training dataframe
 # convert [h,l,c] into 2D series. Centered on last close
-def create_dataset(dataset, look_back=60,look_ahead=3,sample_per=60,sample=.05):
+def create_dataset(dataset, look_back=60,look_ahead=3,sample_per=60,sample=.2):
     idx, dataX, dataY = [], [], []
 
     #Static re-sampling index
@@ -70,15 +70,32 @@ def create_dataset(dataset, look_back=60,look_ahead=3,sample_per=60,sample=.05):
             idx.append(i)
         
     return np.array(idx), np.array(dataX), np.array(dataY)
-        
-i, X,Y = create_dataset(df.as_matrix())
-idx=[np.array(df.index[ix] for ix in i)]
 
 
-np.save('i.np',i)
-np.save('X.np',X)
-np.save('Y.np',Y)
+
+uniqueWeek=set(zip(df.index.year,df.index.week))
+
+i = np.array([])
+X = np.array([]).reshape((0,HistDepth,2))
+Y = np.array([])
+
+for w in uniqueWeek:
+    ii, x,y = create_dataset(df[(df.index.year==w[0]) & (df.index.week==w[1])].as_matrix(),look_back=HistDepth)
+    i=np.append(i,ii,0)
+    X=np.append(X,x,0)
+    Y=np.append(Y,y,0)
+
+
+i, X,Y = create_dataset(df.as_matrix(),sample=.2)
+i=df.index[i]
+
+np.save('data/i',i)
+np.save('data/X',X)
+np.save('data/Y',Y)
  
+i=np.load('data/i.npy')
+X=np.load('data/X.npy')
+Y=np.load('data/Y.npy')
 
 #Cutoff train from test
 tCutOff=int(X.shape[0]*2/3)
@@ -90,14 +107,10 @@ yt=Y[tCutOff:]
 
 
 #Extend training set with pair inverse 
-ii,xi,yi = create_dataset(1/df.as_matrix()[0:int(df.shape[0]*2/3)])
+#ii,xi,yi = create_dataset(1/df.as_matrix()[0:int(df.shape[0]*2/3)])
 #xi=xi.reshape(xi.shape[:-1])
-
-x=np.concatenate((x,xi))
-y=np.concatenate((y,yi))
-
-np.save('x.np',x)
-np.save('y.np',y)
+#x=np.concatenate((x,xi))
+#y=np.concatenate((y,yi))
 
 #Test
 #y=x[:,3,30]>x[:,3,45]
@@ -117,14 +130,12 @@ from sklearn.metrics import roc_auc_score
 from sklearn.metrics import accuracy_score
 
 #Dropout fix
-import tensorflow as tf
-tf.python.control_flow_ops = tf
-
 def buildModel():
     # create and fit the LSTM network
     #Deep with covolution
     model = Sequential()
     model.add(Convolution1D(input_shape=X.shape[1:],nb_filter=32, filter_length=3, border_mode='same', activation='relu'))  #--Raised to 5 makes difference
+    model.add(Convolution1D(nb_filter=32, filter_length=3, border_mode='same', activation='relu'))
     #model.add(Convolution1D(nb_filter=32, filter_length=3, border_mode='same', activation='relu'))
     #model.add(Convolution1D(input_shape=X.shape[1:],nb_filter=32, filter_length=3, border_mode='same', activation='relu'))
     model.add(MaxPooling1D(pool_length=3))
@@ -144,7 +155,7 @@ def trainModel(maxEpoch,model):
     testPerf=[]
     
     for i in range(maxEpoch):
-        trn=model.fit(x, y, nb_epoch=1, batch_size=64)
+        trn=model.fit(x, y, nb_epoch=5, batch_size=64)
         yP=model.predict(xt)
         trainPerf.append([trn.history['acc'][0],trn.history['loss'][0]])
         testPerf.append([accuracy_score(yt, yP>.5),roc_auc_score(yt, yP)])
@@ -154,7 +165,7 @@ def trainModel(maxEpoch,model):
 
 np.random.seed(1664)
 model=buildModel()
-trainPerf, testPerf=trainModel(2,model)
+trainPerf, testPerf=trainModel(1,model)
 model.save('models/model.2.ker')
 
 #Prediction
@@ -169,7 +180,7 @@ sns.distplot(yP)
 f=abs(yP[:,0]-.5)>.035
 ytf=yt[f]
 
-f=(yP[:,0]-.5)>.05
+f=(yP[:,0]-.5)>.35
 ytf=yt[f]
 
 #   Profitability
@@ -223,13 +234,68 @@ model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy']
 model.fit(x, y, nb_epoch=100, batch_size=64)
 #-------------------
 
+#LSTM
+model = Sequential()
+model.add(Convolution1D(input_shape=X.shape[1:],nb_filter=64, filter_length=3, border_mode='same', activation='relu'))
+model.add(Dropout(0.2))
+model.add(LSTM(128,input_shape=X.shape[1:],activation='relu',return_sequences=True))
+model.add(Dropout(0.2))
+model.add(LSTM(10,activation='relu'))
+model.add(Dense(1,activation='sigmoid'))
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.fit(x, y, epochs=3, batch_size=64)
+
 #Regular
 model = Sequential()
-model.add(Dense(5,input_dim=X.shape[-1], activation='relu'))
-#model.add(Dense(30, activation='relu'))
+model.add(Convolution1D(input_shape=X.shape[1:],nb_filter=64, filter_length=3, border_mode='same', activation='relu'))
+model.add(Dropout(0.2))
+model.add(Flatten())
+model.add(Dense(128,activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(10,activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(1,activation='sigmoid'))
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.fit(x, y, epochs=5, batch_size=64)
+
+#Regular
+model = Sequential()
+model.add(Convolution1D(input_shape=X.shape[1:],nb_filter=64, filter_length=3, border_mode='same', activation='relu'))
+model.add(MaxPooling1D(pool_length=2))
+model.add(Dropout(0.2))
+model.add(Convolution1D(nb_filter=64, filter_length=3, border_mode='same', activation='relu'))
+model.add(MaxPooling1D(pool_length=2))
+model.add(Dropout(0.2))
+model.add(Flatten())
+model.add(Dense(1,activation='sigmoid'))
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.fit(x, y, epochs=1, batch_size=64)
+
+#   Test
+yP=model.predict(xt)
+f=(yP[:,0]-.5)>.035
+ytf=yt[f]
+
+#   Summary
+c=confusion_matrix(ytf,yP[f,0]>.5)
+print('Acc=',(c.diagonal().sum()/c.sum()),'AUC=',roc_auc_score(yt, yP))
+#   Profitability
+stake=.535
+c.diagonal().sum()*(1-stake) - np.flipud(c).diagonal().sum() * stake
+
+
+#------------------------------Deep
+model = Sequential()
+model.add(Convolution1D(input_shape=X.shape[1:],filters=32, kernel_size=3, activation='relu'))
+model.add(MaxPooling1D(pool_size=2))
+model.add(Dropout(0.1))
+model.add(Flatten())
+model.add(Dense(16, activation='relu'))
+model.add(Dropout(0.2))
 model.add(Dense(1, activation='sigmoid'))
 model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
-model.fit(x[:,3,:], y, nb_epoch=100, batch_size=32)
+model.fit(x, y, epochs=2, batch_size=64)
+#------------------------------
 
 ####################################
 a=x[:,3,[30,45]]

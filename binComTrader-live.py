@@ -12,14 +12,15 @@ import numpy as np
 import numpy_groupies as npg
 
 #os.chdir('./remi/ML/binary')
-f= open("./data/binCom-live-1.csv","a")
+f= open("./data/binCom-live.csv","a")
 
 #Contract details
 Amount=5
 AmtMax=Amount*(5.25/5)
+MinTradePer=30      #Minimum period (s) between two trades
 
 ContractType="CALL"
-Duration=60
+Duration=3*60
 
 #Model parameters
 HistDepth=60
@@ -205,7 +206,7 @@ def trade(ws,apiUrl):
     #Check result        
     m=json.loads(buyResult)
     if 'error' in m:
-        print('Error buying contract:',m['error'])
+        print('Error buying contract:',m)  #m['error'])
         return 0
     else:
         Ttrades.append(m['buy'])
@@ -223,7 +224,7 @@ def strategy():
         return 0
 
     #Only trade if the previous contract is over
-    if Bepoch[-1]-Tepoch[-1]<Duration:
+    if Bepoch[-1]-Tepoch[-1]<MinTradePer:
         return 0
 
     #Check if no missing history point        
@@ -248,7 +249,7 @@ def strategy():
     a=np.array([h[-HistDepth:],l[-HistDepth:]])
     a=(a-Bprice[-1])/(a.max()-a.min())
 
-    a=a.reshape((1,2, HistDepth))
+    a=a.reshape((1,HistDepth, 2))
     y=model.predict_on_batch([a])[0]
 
     if y>.535:
@@ -258,10 +259,17 @@ def strategy():
 
 #-----------------Main Loop    
 #Load model
-from keras.models import load_model
-import tensorflow as tf
-tf.python.control_flow_ops = tf
-model=load_model('models/model.ker')
+#from keras.models import load_model
+from keras.models import model_from_json
+#model=load_model('models/model.3.ker')
+#Load model
+json_file = open('models/model.json', 'r')
+model_json = json_file.read()
+json_file.close()
+model = model_from_json(model_json)
+# load weights into new model
+model.load_weights("models/model.h5")
+print("Loaded model from disk")
 
 #Define connection
 apiUrl = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
@@ -276,7 +284,7 @@ t=time.time()
 while getQuote(ws,apiUrl)>=0:
     if strategy():
         trade(ws,apiUrl)
-    time.sleep(max(1-(time.time()-t),0))
+    time.sleep(max(1.001-(time.time()-t),0))
     t=time.time()
 
 f.close()    

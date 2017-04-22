@@ -72,7 +72,7 @@ def strategy():
     a=(a-Bprice[-1])/(a.max()-a.min())
 
     a=a.transpose()
-    a=a.reshape((1,look_back,2))
+    a=a.reshape((1,HistDepth,2))
 
     #a=a.reshape((1,2, HistDepth))
     y=model.predict_on_batch([a])[0]
@@ -83,10 +83,8 @@ def strategy():
 
 from keras.models import load_model
 from sklearn.metrics import confusion_matrix, roc_auc_score
-import tensorflow as tf
-tf.python.control_flow_ops = tf
 
-model=load_model('models/model.2.ker')
+#model=load_model('models/model.2.ker')
 
 ws,apiUrl=0,0
 
