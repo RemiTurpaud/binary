@@ -10,8 +10,6 @@ Train from tick data
 
 import numpy as np 
 import pandas as pd 
-import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy_groupies as npg
 
 HistDepth=60
@@ -173,6 +171,7 @@ def evalModels(params):
         trainPerf, testPerf=trainModel(2,model)
         f.write(','.join([str(i),str(trainPerf),str(testPerf)])+'\n')
         saveModel(model,i)
+    f.flush()
     f.close()
 
 #Evaluate models
